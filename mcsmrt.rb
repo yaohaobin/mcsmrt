@@ -75,7 +75,7 @@ if !opts[:host_db].nil?
   end
 end
 
-
+sambamba_dir= "/home/hbyao/test/mcsmrt"
 
 thread           = opts[:threads].to_i
 ee               = opts[:eevalue].to_f 
@@ -169,7 +169,7 @@ end
 
 ##### Takes fq file and returns a hash of read name and ee
 def get_ee_from_fq_file (file_basename, ee, suffix)
-	system("usearch -fastq_filter #{file_basename}.fq -fastqout #{suffix} -fastq_maxee 20000 -fastq_qmax 127 -fastq_qmaxout 127 -fastq_eeout -sample all") or raise "Expected error filtering failed.".red
+	system("#{usearch_dir}/usearch -fastq_filter #{file_basename}.fq -fastqout #{suffix} -fastq_maxee 20000 -fastq_qmax 127 -fastq_qmaxout 127 -fastq_eeout -sample all") or raise "Expected error filtering failed.".red
 	abort("Error: Expected error filtering with usearch failed".red) if File.zero?("#{suffix}")
 
 	# Hash that is returned from this method (read name - key, ee - value)
@@ -189,6 +189,8 @@ def get_ee_from_fq_file (file_basename, ee, suffix)
 	return ee_hash
 end
 
+
+
 ##### Mapping reads to the human genome
 def map_to_human_genome (file_basename, human_db, thread)
   #align all reads to the human genome                                                                                                                   
@@ -198,18 +200,18 @@ def map_to_human_genome (file_basename, human_db, thread)
   abort("Error: Index files are missing, run the bwa index command to index the reference genome and store them in the same directory as the reference genome") if File.zero?("pre_map_to_host.sam")
   
   #sambamba converts sam to bam format                                                                                                                   
-  system("sambamba view -S -f bam pre_map_to_host.sam -o pre_map_to_host.bam") or raise "sambamba command failed. Is sambamba installed and in path?"
+  system("#{sambamba_dir}/sambamba view -S -f bam pre_map_to_host.sam -o pre_map_to_host.bam") or raise "#{sambamba_dir}/sambamba command failed. Is sambamba installed and in path?"
   
   #Sort the bam file                                                                                                                                     
   #`sambamba sort -t#{thread} -o filt_non_host_sorted.bam filt_non_host.bam`
   
   #filter the bam for only ‘not unmapped’ reads -> reads that are mapped                                                                                 
-  system("sambamba view -F 'not unmapped' pre_map_to_host.bam > pre_host_mapped.txt") or raise "sambamba filtering for unmapped reads failed"
+  system("#{sambamba_dir}/sambamba view -F 'not unmapped' pre_map_to_host.bam > pre_host_mapped.txt") or raise "#{sambamba_dir}/sambamba filtering for unmapped reads failed"
   mapped_count = `cut -d ';' -f1 pre_host_mapped.txt | sort | uniq | wc -l`
   mapped_string = `cut -d ';' -f1 pre_host_mapped.txt`
   
   #filter reads out for ‘unmapped’ -> we would use these for pipeline                                                                             
-  system("sambamba view -F 'unmapped' pre_map_to_host.bam > pre_filt_non_host.txt") or raise "sambamba filtering of unmapped reads failed"
+  system("#{sambamba_dir}/sambamba view -F 'unmapped' pre_map_to_host.bam > pre_filt_non_host.txt") or raise "#{sambamba_dir}/sambamba filtering of unmapped reads failed"
   
   #convert the sam file to fastq                                                                                                                         
   system("grep -v ^@ pre_filt_non_host.txt | awk '{print \"@\"$1\"\\n\"$10\"\\n+\\n\"$11}' > pre_filt_non_host.fq") or raise "conversion of same to fastq failed on unmapped host reads"
@@ -218,11 +220,13 @@ def map_to_human_genome (file_basename, human_db, thread)
  	return mapped_count, mapped_string
 end
 
+usearch_dir="/home/hbyao/test/mcsmrt"
+
 ##### Method for primer matching 
 def primer_match (script_directory, file_basename, primer_file, thread)
 	# Run the usearch command for primer matching
-  puts "usearch -usearch_local #{file_basename}.fq -db #{primer_file} -id 0.8 -threads #{thread} -userout pre_primer_map.tsv -userfields query+target+qstrand+tlo+thi+qlo+qhi+pairs+gaps+mism+diffs -strand both -gapopen 1.0 -gapext 0.5 -lopen 1.0 -lext 0.5"
-	system("usearch -usearch_local #{file_basename}.fq -db #{primer_file} -id 0.8 -threads #{thread} -userout pre_primer_map.tsv -userfields query+target+qstrand+tlo+thi+qlo+qhi+pairs+gaps+mism+diffs -strand both -gapopen 1.0 -gapext 0.5 -lopen 1.0 -lext 0.5") or raise "Usearch primer matching failed"
+  puts "#{usearch_dir}/usearch -usearch_local #{file_basename}.fq -db #{primer_file} -id 0.8 -threads #{thread} -userout pre_primer_map.tsv -userfields query+target+qstrand+tlo+thi+qlo+qhi+pairs+gaps+mism+diffs -strand both -gapopen 1.0 -gapext 0.5 -lopen 1.0 -lext 0.5"
+	system("#{usearch_dir}/usearch -usearch_local #{file_basename}.fq -db #{primer_file} -id 0.8 -threads #{thread} -userout pre_primer_map.tsv -userfields query+target+qstrand+tlo+thi+qlo+qhi+pairs+gaps+mism+diffs -strand both -gapopen 1.0 -gapext 0.5 -lopen 1.0 -lext 0.5") or raise "Usearch primer matching failed"
 
   # Check to see if sequences passed primer matching, i.e., if no read has a hit for primers, the output file from the previous step will be empty!
   abort("Error: None of the reads mapped to the primers, check your FASTA file which has the primers") if File.size?("pre_primer_map.tsv").nil?
